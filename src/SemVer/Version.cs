@@ -69,6 +69,61 @@ namespace SemVer
             RegexOptions.IgnorePatternWhitespace);
 
         /// <summary>
+        /// Attempts to construct a new semantic version from a version string
+        /// </summary>
+        /// <param name="input">The version string.</param>
+        /// <param name="version">If successful, will contain the new semantic version.</param>
+        /// <param name="loose">When true, be more forgiving of some invalid version specifications.</param>
+        /// <returns>True if the version string is valid, False if invalid</returns>
+        public static bool TryParse(string input, out Version version, bool loose = false) {
+            if (TryParse(input, out int major, out int minor, out int patch, out string preRelease, out string build, loose)) {
+                version = new Version(input, major, minor, patch, preRelease, build);
+                return true;
+            }
+            else {
+                version = null;
+                return false;
+            }
+        }
+        protected static bool TryParse(string input, out int major, out int minor, out int patch, out string preRelease, out string build, bool loose = false) {
+            var regex = loose ? looseRegex : strictRegex;
+
+            major = minor = patch = 0;
+            preRelease = build = null;
+
+            var match = regex.Match(input);
+            if (!match.Success) {
+                return false;
+            }
+
+            major = Int32.Parse(match.Groups[1].Value);
+
+            minor = Int32.Parse(match.Groups[2].Value);
+
+            patch = Int32.Parse(match.Groups[3].Value);
+
+            if (match.Groups[4].Success) {
+                var inputPreRelease = match.Groups[5].Value;
+                var cleanedPreRelease = PreReleaseVersion.Clean(inputPreRelease);
+                if (!loose && inputPreRelease != cleanedPreRelease) {
+                    return false;
+                }
+                preRelease = cleanedPreRelease;
+            }
+
+            if (match.Groups[6].Success) {
+                build = match.Groups[7].Value;
+            }
+            return true;
+        }
+
+        protected Version(string inputString, int major, int minor, int patch,
+                string preRelease = null, string build = null)
+            : this(major, minor, patch, preRelease, build) {
+            _inputString = inputString;
+        }
+
+        /// <summary>
         /// Construct a new semantic version from a version string.
         /// </summary>
         /// <param name="input">The version string.</param>
@@ -76,37 +131,16 @@ namespace SemVer
         /// <exception cref="System.ArgumentException">Thrown when the version string is invalid.</exception>
         public Version(string input, bool loose=false)
         {
-            _inputString = input;
-
-            var regex = loose ? looseRegex : strictRegex;
-
-            var match = regex.Match(input);
-            if (!match.Success)
-            {
-                throw new ArgumentException(String.Format("Invalid version string: {0}", input));
+            if (TryParse(input, out int major, out int minor, out int patch, out string preRelease, out string build, loose)) {
+                _inputString = input;
+                _major = major;
+                _minor = minor;
+                _patch = patch;
+                _preRelease = preRelease;
+                _build = build;
             }
-
-            _major = Int32.Parse(match.Groups[1].Value);
-
-            _minor = Int32.Parse(match.Groups[2].Value);
-
-            _patch = Int32.Parse(match.Groups[3].Value);
-
-            if (match.Groups[4].Success)
-            {
-                var inputPreRelease = match.Groups[5].Value;
-                var cleanedPreRelease = PreReleaseVersion.Clean(inputPreRelease);
-                if (!loose && inputPreRelease != cleanedPreRelease)
-                {
-                    throw new ArgumentException(String.Format(
-                                "Invalid pre-release version: {0}", inputPreRelease));
-                }
-                _preRelease = cleanedPreRelease;
-            }
-
-            if (match.Groups[6].Success)
-            {
-                _build = match.Groups[7].Value;
+            else {
+                throw new ArgumentException($"Invalid version string: {input}", nameof(input));
             }
         }
 
